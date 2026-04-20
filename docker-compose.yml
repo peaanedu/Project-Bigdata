@@ -210,27 +210,7 @@ services:
       - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
     networks:
       - bigdata
-
-  historyserver:
-    image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
-    container_name: historyserver
-    restart: unless-stopped
-    depends_on:
-      resourcemanager:
-        condition: service_started
-    environment:
-      <<: *common-env
-      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
-      YARN_CONF_yarn_resourcemanager_hostname: resourcemanager
-      SERVICE_PRECONDITION: resourcemanager:8088
-    ports:
-      - "${HISTORYSERVER_UI_PORT}:8188"
-    volumes:
-      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
-    networks:
-      - bigdata
-
-  hive-metastore:
+    hive-metastore:
     image: apache/hive:4.0.0
     container_name: hive-metastore
     restart: unless-stopped
@@ -243,6 +223,7 @@ services:
       <<: *common-env
       SERVICE_NAME: metastore
       DB_DRIVER: postgres
+      HIVE_CUSTOM_CONF_DIR: /hive_custom_conf
       SERVICE_OPTS: >-
         -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
         -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
@@ -251,12 +232,15 @@ services:
     ports:
       - "${HIVE_METASTORE_PORT}:9083"
     volumes:
-      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+      - ./hive/conf:/hive_custom_conf:ro
+      - ./hadoop/conf/core-site.xml:/hive_custom_conf/core-site.xml:ro
+      - ./hadoop/conf/hdfs-site.xml:/hive_custom_conf/hdfs-site.xml:ro
     healthcheck:
-      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/9083' || exit 1"]
-      interval: 20s
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9083' || exit 1"]
+      interval: 30s
       timeout: 10s
-      retries: 20
+      retries: 30
+      start_period: 60s
     networks:
       - bigdata
 
@@ -272,6 +256,7 @@ services:
       SERVICE_NAME: hiveserver2
       DB_DRIVER: postgres
       IS_RESUME: "true"
+      HIVE_CUSTOM_CONF_DIR: /hive_custom_conf
       SERVICE_OPTS: >-
         -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
         -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
@@ -282,14 +267,17 @@ services:
       - "${HIVE_SERVER2_PORT}:10000"
       - "10002:10002"
     volumes:
-      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+      - ./hive/conf:/hive_custom_conf:ro
+      - ./hadoop/conf/core-site.xml:/hive_custom_conf/core-site.xml:ro
+      - ./hadoop/conf/hdfs-site.xml:/hive_custom_conf/hdfs-site.xml:ro
       - ./scripts/create-hive-tables.sql:/opt/hive/scripts/create-hive-tables.sql:ro
       - ./datasets:/datasets:ro
     healthcheck:
-      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/10000' || exit 1"]
-      interval: 20s
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/10000' || exit 1"]
+      interval: 30s
       timeout: 10s
-      retries: 20
+      retries: 30
+      start_period: 90s
     networks:
       - bigdata
 
