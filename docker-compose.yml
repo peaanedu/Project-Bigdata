@@ -228,33 +228,6 @@ services:
     networks:
       - bigdata
 
-  hdfs-init:
-    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
-    container_name: hdfs-init
-    depends_on:
-      namenode:
-        condition: service_healthy
-      datanode1:
-        condition: service_started
-      datanode2:
-        condition: service_started
-      datanode3:
-        condition: service_started
-    entrypoint: ["/bin/bash","-lc"]
-    command: >
-      "hdfs dfs -mkdir -p /user/hive/warehouse &&
-       hdfs dfs -mkdir -p /tmp/hive &&
-       hdfs dfs -chmod -R 777 /user/hive &&
-       hdfs dfs -chmod -R 777 /tmp/hive"
-    environment:
-      <<: *common-env
-      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
-    volumes:
-      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
-    networks:
-      - bigdata
-    restart: "no"
-
   hive-metastore:
     image: apache/hive:4.0.0
     container_name: hive-metastore
@@ -264,8 +237,6 @@ services:
         condition: service_healthy
       namenode:
         condition: service_healthy
-      hdfs-init:
-        condition: service_completed_successfully
     environment:
       <<: *common-env
       SERVICE_NAME: metastore
