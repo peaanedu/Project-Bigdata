@@ -27,7 +27,12 @@ Production-style Docker lab for:
 ```bash
 cp .env .env.local 2>/dev/null || true
 ```
-
+### Create connector database
+```basj
+mkdir -p hive/jdbc
+cd hive/jdbc
+wget https://jdbc.postgresql.org/download/postgresql-42.7.3.jar
+````
 ### 2) Start services
 ```bash
 docker compose up -d
