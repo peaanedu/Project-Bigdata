@@ -242,6 +242,7 @@ services:
       SERVICE_NAME: metastore
       DB_DRIVER: postgres
       HIVE_CUSTOM_CONF_DIR: /hive_custom_conf
+      HIVE_AUX_JARS_PATH: /opt/hive/jdbc/postgresql-42.7.3.jar
       SERVICE_OPTS: >-
         -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-metastore}
         -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
@@ -251,7 +252,7 @@ services:
       - "${HIVE_METASTORE_PORT:-9083}:9083"
     volumes:
       - ./hive/conf:/hive_custom_conf:ro
-      - ./hive/jdbc/postgresql-42.7.3.jar:/opt/hive/lib/postgresql-42.7.3.jar:ro
+      - ./hive/jdbc:/opt/hive/jdbc:ro
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9083' || exit 1"]
       interval: 30s
@@ -274,6 +275,7 @@ services:
       DB_DRIVER: postgres
       IS_RESUME: "true"
       HIVE_CUSTOM_CONF_DIR: /hive_custom_conf
+      HIVE_AUX_JARS_PATH: /opt/hive/jdbc/postgresql-42.7.3.jar
       SERVICE_OPTS: >-
         -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-metastore}
         -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
@@ -283,17 +285,11 @@ services:
     ports:
       - "${HIVE_SERVER2_PORT:-10000}:10000"
       - "10002:10002"
-#    volumes:
     volumes:
       - ./hive/conf:/hive_custom_conf:ro
-      - ./hive/jdbc/postgresql-42.7.3.jar:/opt/hive/lib/postgresql.jar:ro
+      - ./hive/jdbc:/opt/hive/jdbc:ro
       - ./scripts/create-hive-tables.sql:/opt/hive/scripts/create-hive-tables.sql:ro
       - ./datasets:/datasets:ro
- 
- #     - ./hive/conf:/hive_custom_conf:ro
- #     - ./hive/jdbc/postgresql-42.7.3.jar:/opt/hive/lib/postgresql-42.7.3.jar:ro
- #     - ./scripts/create-hive-tables.sql:/opt/hive/scripts/create-hive-tables.sql:ro
- #     - ./datasets:/datasets:ro
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/10000' || exit 1"]
       interval: 30s
