@@ -38,7 +38,7 @@ services:
       - bigdata
 
   namenode:
-    image: bde2020/hadoop-namenode:2.0.0-hadoop3.3.6-java8
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
     container_name: namenode
     restart: unless-stopped
     environment:
@@ -65,7 +65,7 @@ services:
       - bigdata
 
   datanode1:
-    image: bde2020/hadoop-datanode:2.0.0-hadoop3.3.6-java8
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
     container_name: datanode1
     restart: unless-stopped
     depends_on:
@@ -86,7 +86,7 @@ services:
       - bigdata
 
   datanode2:
-    image: bde2020/hadoop-datanode:2.0.0-hadoop3.3.6-java8
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
     container_name: datanode2
     restart: unless-stopped
     depends_on:
@@ -107,7 +107,7 @@ services:
       - bigdata
 
   datanode3:
-    image: bde2020/hadoop-datanode:2.0.0-hadoop3.3.6-java8
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
     container_name: datanode3
     restart: unless-stopped
     depends_on:
@@ -128,7 +128,7 @@ services:
       - bigdata
 
   resourcemanager:
-    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.3.6-java8
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
     container_name: resourcemanager
     restart: unless-stopped
     depends_on:
@@ -155,7 +155,7 @@ services:
       - bigdata
 
   nodemanager1:
-    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.3.6-java8
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
     container_name: nodemanager1
     restart: unless-stopped
     depends_on:
@@ -174,7 +174,7 @@ services:
       - bigdata
 
   nodemanager2:
-    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.3.6-java8
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
     container_name: nodemanager2
     restart: unless-stopped
     depends_on:
@@ -193,7 +193,7 @@ services:
       - bigdata
 
   nodemanager3:
-    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.3.6-java8
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
     container_name: nodemanager3
     restart: unless-stopped
     depends_on:
@@ -212,7 +212,7 @@ services:
       - bigdata
 
   historyserver:
-    image: bde2020/hadoop-historyserver:2.0.0-hadoop3.3.6-java8
+    image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
     container_name: historyserver
     restart: unless-stopped
     depends_on:
@@ -294,66 +294,68 @@ services:
       - bigdata
 
   spark-master:
-    image: bitnami/spark:3.5.5
+    image: apache/spark:3.5.5-python3
     container_name: spark-master
     restart: unless-stopped
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
     environment:
       <<: *common-env
-      SPARK_MODE: master
-      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
-      SPARK_RPC_ENCRYPTION_ENABLED: "no"
-      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
-      SPARK_SSL_ENABLED: "no"
+      SPARK_NO_DAEMONIZE: "true"
     ports:
       - "${SPARK_MASTER_UI_PORT}:8080"
       - "${SPARK_MASTER_PORT}:7077"
     volumes:
-      - ./spark/conf/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf:ro
       - ./datasets:/datasets:ro
+      - ./spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
       - spark_events:/tmp/spark-events
     networks:
       - bigdata
 
   spark-worker1:
-    image: bitnami/spark:3.5.5
+    image: apache/spark:3.5.5-python3
     container_name: spark-worker1
     restart: unless-stopped
     depends_on:
       - spark-master
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
     environment:
       <<: *common-env
-      SPARK_MODE: worker
-      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_NO_DAEMONIZE: "true"
       SPARK_WORKER_MEMORY: 2G
       SPARK_WORKER_CORES: 2
     volumes:
-      - ./spark/conf/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf:ro
       - ./datasets:/datasets:ro
+      - ./spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
       - spark_events:/tmp/spark-events
     networks:
       - bigdata
 
   spark-worker2:
-    image: bitnami/spark:3.5.5
+    image: apache/spark:3.5.5-python3
     container_name: spark-worker2
     restart: unless-stopped
     depends_on:
       - spark-master
+    command: >
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
     environment:
       <<: *common-env
-      SPARK_MODE: worker
-      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_NO_DAEMONIZE: "true"
       SPARK_WORKER_MEMORY: 2G
       SPARK_WORKER_CORES: 2
     volumes:
-      - ./spark/conf/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf:ro
       - ./datasets:/datasets:ro
+      - ./spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
       - spark_events:/tmp/spark-events
     networks:
       - bigdata
 
   jupyter:
-    image: quay.io/jupyter/pyspark-notebook:x86_64-python-3.11.6
+    image: jupyter/pyspark-notebook:x86_64-python-3.11.6
     container_name: jupyter
     restart: unless-stopped
     depends_on:
