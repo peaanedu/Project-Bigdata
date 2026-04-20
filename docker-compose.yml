@@ -1,5 +1,3 @@
-version: "3.9"
-
 x-common-env: &common-env
   TZ: ${TZ}
 
@@ -210,7 +208,8 @@ services:
       - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
     networks:
       - bigdata
-    hive-metastore:
+
+  hive-metastore:
     image: apache/hive:4.0.0
     container_name: hive-metastore
     restart: unless-stopped
