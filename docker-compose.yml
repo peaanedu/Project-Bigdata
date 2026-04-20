@@ -1,0 +1,401 @@
+version: "3.9"
+
+x-common-env: &common-env
+  TZ: ${TZ}
+
+networks:
+  bigdata:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  namenode_data:
+  datanode1_data:
+  datanode2_data:
+  datanode3_data:
+  spark_events:
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks:
+      - bigdata
+
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.3.6-java8
+    container_name: namenode
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      CLUSTER_NAME: bigdata-cluster-v2
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_replication: 2
+      HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check: "false"
+      HDFS_CONF_dfs_permissions_enabled: "false"
+    ports:
+      - "${NAMENODE_UI_PORT}:9870"
+      - "${NAMENODE_RPC_PORT}:9000"
+    volumes:
+      - namenode_data:/hadoop/dfs/name
+      - ./datasets:/datasets:ro
+      - ./scripts:/scripts:ro
+      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9870/ >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+    networks:
+      - bigdata
+
+  datanode1:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.3.6-java8
+    container_name: datanode1
+    restart: unless-stopped
+    depends_on:
+      namenode:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_permissions_enabled: "false"
+      SERVICE_PRECONDITION: namenode:9870
+    ports:
+      - "${DATANODE_UI_PORT_1}:9864"
+    volumes:
+      - datanode1_data:/hadoop/dfs/data
+      - ./datasets:/datasets:ro
+      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
+    networks:
+      - bigdata
+
+  datanode2:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.3.6-java8
+    container_name: datanode2
+    restart: unless-stopped
+    depends_on:
+      namenode:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_permissions_enabled: "false"
+      SERVICE_PRECONDITION: namenode:9870
+    ports:
+      - "${DATANODE_UI_PORT_2}:9864"
+    volumes:
+      - datanode2_data:/hadoop/dfs/data
+      - ./datasets:/datasets:ro
+      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
+    networks:
+      - bigdata
+
+  datanode3:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.3.6-java8
+    container_name: datanode3
+    restart: unless-stopped
+    depends_on:
+      namenode:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      HDFS_CONF_dfs_permissions_enabled: "false"
+      SERVICE_PRECONDITION: namenode:9870
+    ports:
+      - "${DATANODE_UI_PORT_3}:9864"
+    volumes:
+      - datanode3_data:/hadoop/dfs/data
+      - ./datasets:/datasets:ro
+      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
+    networks:
+      - bigdata
+
+  resourcemanager:
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.3.6-java8
+    container_name: resourcemanager
+    restart: unless-stopped
+    depends_on:
+      namenode:
+        condition: service_healthy
+      datanode1:
+        condition: service_started
+      datanode2:
+        condition: service_started
+      datanode3:
+        condition: service_started
+    environment:
+      <<: *common-env
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      YARN_CONF_yarn_resourcemanager_hostname: resourcemanager
+      YARN_CONF_yarn_nodemanager_aux___services: mapreduce_shuffle
+      MAPRED_CONF_mapreduce_framework_name: yarn
+      SERVICE_PRECONDITION: namenode:9000 namenode:9870 datanode1:9864 datanode2:9864 datanode3:9864
+    ports:
+      - "${RESOURCEMANAGER_UI_PORT}:8088"
+    volumes:
+      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
+    networks:
+      - bigdata
+
+  nodemanager1:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.3.6-java8
+    container_name: nodemanager1
+    restart: unless-stopped
+    depends_on:
+      resourcemanager:
+        condition: service_started
+    environment:
+      <<: *common-env
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      YARN_CONF_yarn_resourcemanager_hostname: resourcemanager
+      YARN_CONF_yarn_nodemanager_aux___services: mapreduce_shuffle
+      MAPRED_CONF_mapreduce_framework_name: yarn
+      SERVICE_PRECONDITION: resourcemanager:8088
+    volumes:
+      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
+    networks:
+      - bigdata
+
+  nodemanager2:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.3.6-java8
+    container_name: nodemanager2
+    restart: unless-stopped
+    depends_on:
+      resourcemanager:
+        condition: service_started
+    environment:
+      <<: *common-env
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      YARN_CONF_yarn_resourcemanager_hostname: resourcemanager
+      YARN_CONF_yarn_nodemanager_aux___services: mapreduce_shuffle
+      MAPRED_CONF_mapreduce_framework_name: yarn
+      SERVICE_PRECONDITION: resourcemanager:8088
+    volumes:
+      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
+    networks:
+      - bigdata
+
+  nodemanager3:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.3.6-java8
+    container_name: nodemanager3
+    restart: unless-stopped
+    depends_on:
+      resourcemanager:
+        condition: service_started
+    environment:
+      <<: *common-env
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      YARN_CONF_yarn_resourcemanager_hostname: resourcemanager
+      YARN_CONF_yarn_nodemanager_aux___services: mapreduce_shuffle
+      MAPRED_CONF_mapreduce_framework_name: yarn
+      SERVICE_PRECONDITION: resourcemanager:8088
+    volumes:
+      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
+    networks:
+      - bigdata
+
+  historyserver:
+    image: bde2020/hadoop-historyserver:2.0.0-hadoop3.3.6-java8
+    container_name: historyserver
+    restart: unless-stopped
+    depends_on:
+      resourcemanager:
+        condition: service_started
+    environment:
+      <<: *common-env
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      YARN_CONF_yarn_resourcemanager_hostname: resourcemanager
+      SERVICE_PRECONDITION: resourcemanager:8088
+    ports:
+      - "${HISTORYSERVER_UI_PORT}:8188"
+    volumes:
+      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
+    networks:
+      - bigdata
+
+  hive-metastore:
+    image: apache/hive:4.0.0
+    container_name: hive-metastore
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      namenode:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      SERVICE_NAME: metastore
+      DB_DRIVER: postgres
+      SERVICE_OPTS: >-
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
+        -Djavax.jdo.option.ConnectionUserName=${POSTGRES_USER}
+        -Djavax.jdo.option.ConnectionPassword=${POSTGRES_PASSWORD}
+    ports:
+      - "${HIVE_METASTORE_PORT}:9083"
+    volumes:
+      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/9083' || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+    networks:
+      - bigdata
+
+  hive-server:
+    image: apache/hive:4.0.0
+    container_name: hive-server
+    restart: unless-stopped
+    depends_on:
+      hive-metastore:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+      SERVICE_NAME: hiveserver2
+      DB_DRIVER: postgres
+      IS_RESUME: "true"
+      SERVICE_OPTS: >-
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
+        -Djavax.jdo.option.ConnectionUserName=${POSTGRES_USER}
+        -Djavax.jdo.option.ConnectionPassword=${POSTGRES_PASSWORD}
+        -Dhive.metastore.uris=thrift://hive-metastore:9083
+    ports:
+      - "${HIVE_SERVER2_PORT}:10000"
+      - "10002:10002"
+    volumes:
+      - ./hive/conf/hive-site.xml:/opt/hive/conf/hive-site.xml:ro
+      - ./scripts/create-hive-tables.sql:/opt/hive/scripts/create-hive-tables.sql:ro
+      - ./datasets:/datasets:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/10000' || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+    networks:
+      - bigdata
+
+  spark-master:
+    image: bitnami/spark:3.5.5
+    container_name: spark-master
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SPARK_MODE: master
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+    ports:
+      - "${SPARK_MASTER_UI_PORT}:8080"
+      - "${SPARK_MASTER_PORT}:7077"
+    volumes:
+      - ./spark/conf/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf:ro
+      - ./datasets:/datasets:ro
+      - spark_events:/tmp/spark-events
+    networks:
+      - bigdata
+
+  spark-worker1:
+    image: bitnami/spark:3.5.5
+    container_name: spark-worker1
+    restart: unless-stopped
+    depends_on:
+      - spark-master
+    environment:
+      <<: *common-env
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+    volumes:
+      - ./spark/conf/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf:ro
+      - ./datasets:/datasets:ro
+      - spark_events:/tmp/spark-events
+    networks:
+      - bigdata
+
+  spark-worker2:
+    image: bitnami/spark:3.5.5
+    container_name: spark-worker2
+    restart: unless-stopped
+    depends_on:
+      - spark-master
+    environment:
+      <<: *common-env
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+    volumes:
+      - ./spark/conf/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf:ro
+      - ./datasets:/datasets:ro
+      - spark_events:/tmp/spark-events
+    networks:
+      - bigdata
+
+  jupyter:
+    image: quay.io/jupyter/pyspark-notebook:x86_64-python-3.11.6
+    container_name: jupyter
+    restart: unless-stopped
+    depends_on:
+      - spark-master
+      - hive-server
+    environment:
+      <<: *common-env
+      JUPYTER_ENABLE_LAB: "yes"
+      SPARK_MASTER: spark://spark-master:7077
+      PYSPARK_PYTHON: python3
+      PYSPARK_DRIVER_PYTHON: python3
+    ports:
+      - "${JUPYTER_PORT}:8888"
+      - "${SPARK_APP_UI_PORT}:4040"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+      - ./datasets:/home/jovyan/datasets:ro
+      - ./spark/conf/spark-defaults.conf:/usr/local/spark/conf/spark-defaults.conf:ro
+    command: >
+      start-notebook.sh
+      --NotebookApp.token='admin123'
+      --NotebookApp.password=''
+    networks:
+      - bigdata
+
+  trino:
+    image: trinodb/trino:472
+    container_name: trino
+    restart: unless-stopped
+    depends_on:
+      hive-metastore:
+        condition: service_healthy
+    ports:
+      - "${TRINO_PORT}:8080"
+    volumes:
+      - ./trino/etc:/etc/trino:ro
+      - ./hadoop/conf/core-site.xml:/etc/trino/core-site.xml:ro
+      - ./hadoop/conf/hdfs-site.xml:/etc/trino/hdfs-site.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/v1/info >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+    networks:
+      - bigdata
