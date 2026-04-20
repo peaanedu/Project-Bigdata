@@ -1,5 +1,5 @@
 x-common-env: &common-env
-  TZ: ${TZ}
+  TZ: ${TZ:-Asia/Phnom_Penh}
 
 networks:
   bigdata:
@@ -47,8 +47,8 @@ services:
       HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check: "false"
       HDFS_CONF_dfs_permissions_enabled: "false"
     ports:
-      - "${NAMENODE_UI_PORT}:9870"
-      - "${NAMENODE_RPC_PORT}:9000"
+      - "${NAMENODE_UI_PORT:-9870}:9870"
+      - "${NAMENODE_RPC_PORT:-9000}:9000"
     volumes:
       - namenode_data:/hadoop/dfs/name
       - ./datasets:/datasets:ro
@@ -75,7 +75,7 @@ services:
       HDFS_CONF_dfs_permissions_enabled: "false"
       SERVICE_PRECONDITION: namenode:9870
     ports:
-      - "${DATANODE_UI_PORT_1}:9864"
+      - "${DATANODE_UI_PORT_1:-9864}:9864"
     volumes:
       - datanode1_data:/hadoop/dfs/data
       - ./datasets:/datasets:ro
@@ -96,7 +96,7 @@ services:
       HDFS_CONF_dfs_permissions_enabled: "false"
       SERVICE_PRECONDITION: namenode:9870
     ports:
-      - "${DATANODE_UI_PORT_2}:9864"
+      - "${DATANODE_UI_PORT_2:-9865}:9864"
     volumes:
       - datanode2_data:/hadoop/dfs/data
       - ./datasets:/datasets:ro
@@ -117,7 +117,7 @@ services:
       HDFS_CONF_dfs_permissions_enabled: "false"
       SERVICE_PRECONDITION: namenode:9870
     ports:
-      - "${DATANODE_UI_PORT_3}:9864"
+      - "${DATANODE_UI_PORT_3:-9866}:9864"
     volumes:
       - datanode3_data:/hadoop/dfs/data
       - ./datasets:/datasets:ro
@@ -146,7 +146,7 @@ services:
       MAPRED_CONF_mapreduce_framework_name: yarn
       SERVICE_PRECONDITION: namenode:9000 namenode:9870 datanode1:9864 datanode2:9864 datanode3:9864
     ports:
-      - "${RESOURCEMANAGER_UI_PORT}:8088"
+      - "${RESOURCEMANAGER_UI_PORT:-8088}:8088"
     volumes:
       - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
     networks:
@@ -209,6 +209,52 @@ services:
     networks:
       - bigdata
 
+  historyserver:
+    image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
+    container_name: historyserver
+    restart: unless-stopped
+    depends_on:
+      resourcemanager:
+        condition: service_started
+    environment:
+      <<: *common-env
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+      YARN_CONF_yarn_resourcemanager_hostname: resourcemanager
+      SERVICE_PRECONDITION: resourcemanager:8088
+    ports:
+      - "${HISTORYSERVER_UI_PORT:-8188}:8188"
+    volumes:
+      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
+    networks:
+      - bigdata
+
+  hdfs-init:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-init
+    depends_on:
+      namenode:
+        condition: service_healthy
+      datanode1:
+        condition: service_started
+      datanode2:
+        condition: service_started
+      datanode3:
+        condition: service_started
+    entrypoint: ["/bin/bash","-lc"]
+    command: >
+      "hdfs dfs -mkdir -p /user/hive/warehouse &&
+       hdfs dfs -mkdir -p /tmp/hive &&
+       hdfs dfs -chmod -R 777 /user/hive &&
+       hdfs dfs -chmod -R 777 /tmp/hive"
+    environment:
+      <<: *common-env
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+    volumes:
+      - ./hadoop/conf:/opt/hadoop/etc/hadoop:ro
+    networks:
+      - bigdata
+    restart: "no"
+
   hive-metastore:
     image: apache/hive:4.0.0
     container_name: hive-metastore
@@ -218,6 +264,8 @@ services:
         condition: service_healthy
       namenode:
         condition: service_healthy
+      hdfs-init:
+        condition: service_completed_successfully
     environment:
       <<: *common-env
       SERVICE_NAME: metastore
@@ -229,11 +277,9 @@ services:
         -Djavax.jdo.option.ConnectionUserName=${POSTGRES_USER}
         -Djavax.jdo.option.ConnectionPassword=${POSTGRES_PASSWORD}
     ports:
-      - "${HIVE_METASTORE_PORT}:9083"
+      - "${HIVE_METASTORE_PORT:-9083}:9083"
     volumes:
       - ./hive/conf:/hive_custom_conf:ro
-      - ./hadoop/conf/core-site.xml:/hive_custom_conf/core-site.xml:ro
-      - ./hadoop/conf/hdfs-site.xml:/hive_custom_conf/hdfs-site.xml:ro
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9083' || exit 1"]
       interval: 30s
@@ -263,12 +309,10 @@ services:
         -Djavax.jdo.option.ConnectionPassword=${POSTGRES_PASSWORD}
         -Dhive.metastore.uris=thrift://hive-metastore:9083
     ports:
-      - "${HIVE_SERVER2_PORT}:10000"
+      - "${HIVE_SERVER2_PORT:-10000}:10000"
       - "10002:10002"
     volumes:
       - ./hive/conf:/hive_custom_conf:ro
-      - ./hadoop/conf/core-site.xml:/hive_custom_conf/core-site.xml:ro
-      - ./hadoop/conf/hdfs-site.xml:/hive_custom_conf/hdfs-site.xml:ro
       - ./scripts/create-hive-tables.sql:/opt/hive/scripts/create-hive-tables.sql:ro
       - ./datasets:/datasets:ro
     healthcheck:
@@ -290,8 +334,8 @@ services:
       <<: *common-env
       SPARK_NO_DAEMONIZE: "true"
     ports:
-      - "${SPARK_MASTER_UI_PORT}:8080"
-      - "${SPARK_MASTER_PORT}:7077"
+      - "${SPARK_MASTER_UI_PORT:-8080}:8080"
+      - "${SPARK_MASTER_PORT:-7077}:7077"
     volumes:
       - ./datasets:/datasets:ro
       - ./spark/conf/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf:ro
@@ -355,8 +399,8 @@ services:
       PYSPARK_PYTHON: python3
       PYSPARK_DRIVER_PYTHON: python3
     ports:
-      - "${JUPYTER_PORT}:8888"
-      - "${SPARK_APP_UI_PORT}:4040"
+      - "${JUPYTER_PORT:-8888}:8888"
+      - "${SPARK_APP_UI_PORT:-4040}:4040"
     volumes:
       - ./notebooks:/home/jovyan/work
       - ./datasets:/home/jovyan/datasets:ro
@@ -376,7 +420,7 @@ services:
       hive-metastore:
         condition: service_healthy
     ports:
-      - "${TRINO_PORT}:8080"
+      - "${TRINO_PORT:-8081}:8080"
     volumes:
       - ./trino/etc:/etc/trino:ro
       - ./hadoop/conf/core-site.xml:/etc/trino/core-site.xml:ro
