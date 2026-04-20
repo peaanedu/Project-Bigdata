@@ -20,15 +20,15 @@ services:
     restart: unless-stopped
     environment:
       <<: *common-env
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-metastore}
+      POSTGRES_USER: ${POSTGRES_USER:-hive}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hive123}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hive} -d ${POSTGRES_DB:-metastore}"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -243,20 +243,21 @@ services:
       DB_DRIVER: postgres
       HIVE_CUSTOM_CONF_DIR: /hive_custom_conf
       SERVICE_OPTS: >-
-        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-metastore}
         -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
-        -Djavax.jdo.option.ConnectionUserName=${POSTGRES_USER}
-        -Djavax.jdo.option.ConnectionPassword=${POSTGRES_PASSWORD}
+        -Djavax.jdo.option.ConnectionUserName=${POSTGRES_USER:-hive}
+        -Djavax.jdo.option.ConnectionPassword=${POSTGRES_PASSWORD:-hive123}
     ports:
       - "${HIVE_METASTORE_PORT:-9083}:9083"
     volumes:
       - ./hive/conf:/hive_custom_conf:ro
+      - ./hive/jdbc/postgresql-42.7.3.jar:/opt/hive/lib/postgresql-42.7.3.jar:ro
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9083' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 30
-      start_period: 60s
+      start_period: 90s
     networks:
       - bigdata
 
@@ -274,16 +275,17 @@ services:
       IS_RESUME: "true"
       HIVE_CUSTOM_CONF_DIR: /hive_custom_conf
       SERVICE_OPTS: >-
-        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-metastore}
         -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
-        -Djavax.jdo.option.ConnectionUserName=${POSTGRES_USER}
-        -Djavax.jdo.option.ConnectionPassword=${POSTGRES_PASSWORD}
+        -Djavax.jdo.option.ConnectionUserName=${POSTGRES_USER:-hive}
+        -Djavax.jdo.option.ConnectionPassword=${POSTGRES_PASSWORD:-hive123}
         -Dhive.metastore.uris=thrift://hive-metastore:9083
     ports:
       - "${HIVE_SERVER2_PORT:-10000}:10000"
       - "10002:10002"
     volumes:
       - ./hive/conf:/hive_custom_conf:ro
+      - ./hive/jdbc/postgresql-42.7.3.jar:/opt/hive/lib/postgresql-42.7.3.jar:ro
       - ./scripts/create-hive-tables.sql:/opt/hive/scripts/create-hive-tables.sql:ro
       - ./datasets:/datasets:ro
     healthcheck:
@@ -291,7 +293,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 30
-      start_period: 90s
+      start_period: 120s
     networks:
       - bigdata
 
